@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars (gitignored) and fill in real values.
+# terraform.tfvars is never committed — see .gitignore.
+
+argocd_chart_version = "9.7.1"
+github_repo_url      = "https://github.com/<GITHUB_USER>/sovereign-ai-platform.git"
+kubeconfig_path      = "~/.kube/config"

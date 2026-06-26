@@ -1,0 +1,74 @@
+# A fully PSA-restricted, Kyverno-compliant sample workload.
+# Demonstrates that a real application can run within all enforced security
+# constraints without modification.
+#
+# Passes all four ClusterPolicies:
+#   - disallow-privileged: privileged=false, no initContainers
+#   - require-resources: explicit requests and limits on every container
+#   - verify-image-signatures: cgr.dev/* does not match ghcr.io/<GITHUB_USER>/*
+#   - require-netpol: NetworkPolicy generated separately at namespace creation
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sample-app
+  namespace: platform
+  labels:
+    app: sample-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sample-app
+  template:
+    metadata:
+      labels:
+        app: sample-app
+    spec:
+      # Run as a non-root user; UID 65532 is the standard Chainguard non-root UID
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        # RuntimeDefault seccomp profile is required by PSA restricted
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: nginx
+          # Chainguard distroless nginx — replace <CHAINGUARD_NGINX_TAG> with a
+          # specific version tag (e.g. 1.27) before applying to the cluster
+          image: "cgr.dev/chainguard/nginx:<CHAINGUARD_NGINX_TAG>"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          securityContext:
+            # Must be false for PSA restricted
+            allowPrivilegeEscalation: false
+            # Must be false for disallow-privileged policy
+            privileged: false
+            # Drop all capabilities; add back only what is explicitly needed
+            capabilities:
+              drop:
+                - ALL
+            # Read-only root filesystem reduces attack surface
+            readOnlyRootFilesystem: true
+          # Chainguard nginx writes temp files here; emptyDir satisfies the
+          # read-only root filesystem constraint
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}

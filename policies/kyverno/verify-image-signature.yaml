@@ -1,0 +1,42 @@
+# Verifies Cosign keyless signatures for images in the platform namespace.
+# Audit mode: violations are recorded in PolicyReport but pods are NOT blocked.
+# Switch validationFailureAction to Enforce after the CI pipeline is configured
+# to sign images on push with `cosign sign`.
+#
+# Keyless signing relies on Sigstore's Fulcio CA and Rekor transparency log.
+# The issuer and subject patterns below must match your GitHub Actions OIDC
+# token claims when signing with `cosign sign` in a workflow.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signatures
+  annotations:
+    policies.kyverno.io/title: Verify Image Signatures (Cosign Keyless)
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: >-
+      Audits that container images in the platform namespace are signed via
+      Cosign keyless (Sigstore). Switch validationFailureAction to Enforce
+      once image signing is integrated into the CI pipeline.
+spec:
+  validationFailureAction: Audit
+  background: false
+  rules:
+    - name: verify-ghcr-image-signature
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - platform
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/<GITHUB_USER>/*"
+          attestors:
+            - count: 1
+              entries:
+                - keyless:
+                    subject: "https://github.com/<GITHUB_USER>/*"
+                    issuer: "https://token.actions.githubusercontent.com"
+                    rekor:
+                      url: https://rekor.sigstore.dev

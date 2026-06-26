@@ -1,0 +1,24 @@
+# ArgoCD Application that applies the Kyverno ClusterPolicy manifests from
+# policies/kyverno/. Uses raw manifests (no Helm/Kustomize wrapper needed).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-policies
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/<GITHUB_USER>/sovereign-ai-platform.git
+    targetRevision: HEAD
+    path: policies/kyverno
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kyverno
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

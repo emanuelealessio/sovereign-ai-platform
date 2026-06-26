@@ -1,0 +1,36 @@
+# Automatically generates a default-deny NetworkPolicy in every new Namespace.
+# This implements a zero-trust network posture: traffic must be explicitly
+# allowed rather than implicitly permitted.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-netpol
+  annotations:
+    policies.kyverno.io/title: Generate Default-Deny NetworkPolicy
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/description: >-
+      Generates a default-deny ingress+egress NetworkPolicy in every namespace
+      at creation time. Workloads must add explicit allow rules to communicate.
+spec:
+  rules:
+    - name: generate-default-deny
+      match:
+        any:
+          - resources:
+              kinds:
+                - Namespace
+      generate:
+        # Keep the generated policy in sync if this rule changes
+        synchronize: true
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        name: default-deny
+        namespace: "{{request.object.metadata.name}}"
+        data:
+          spec:
+            # Empty podSelector matches all pods in the namespace
+            podSelector: {}
+            # Explicitly listing both directions makes the deny-all intent clear
+            policyTypes:
+              - Ingress
+              - Egress

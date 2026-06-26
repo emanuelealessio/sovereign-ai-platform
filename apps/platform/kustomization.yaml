@@ -1,0 +1,9 @@
+# Kustomize entrypoint for the platform namespace workloads.
+# ArgoCD uses Kustomize automatically when it finds a kustomization.yaml.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: platform
+
+resources:
+  - sample-app.yaml

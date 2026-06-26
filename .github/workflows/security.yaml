@@ -1,0 +1,76 @@
+# Security scanning pipeline: container/IaC config scanning (Trivy),
+# Terraform static analysis (Checkov), and OPA policy gates (Conftest).
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly scan every Monday at 08:00 UTC to catch newly published CVEs
+    - cron: "0 8 * * 1"
+
+jobs:
+  trivy-config:
+    name: Trivy Config Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Trivy (config scan)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: config
+          # Scan the entire repo for misconfigured Kubernetes and Terraform files
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+  checkov:
+    name: Checkov IaC Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          framework: terraform,kubernetes
+          # soft_fail=true reports findings without blocking; remove this line
+          # once the skip-list is tuned and the baseline is clean.
+          soft_fail: true
+
+  conftest:
+    name: Conftest OPA Policy Gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Conftest
+        run: |
+          CONFTEST_VERSION=$(curl -s https://api.github.com/repos/open-policy-agent/conftest/releases/latest \
+            | grep '"tag_name"' | sed 's/.*"tag_name": "v\(.*\)".*/\1/')
+          curl -Lo /tmp/conftest.tar.gz \
+            "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz"
+          tar -xzf /tmp/conftest.tar.gz -C /usr/local/bin conftest
+          chmod +x /usr/local/bin/conftest
+
+      - name: Run Conftest
+        # OPA policies go in .github/policies/ as .rego files. This step is a
+        # graceful no-op until policies are authored — it prints guidance
+        # instead of failing an empty policy directory.
+        run: |
+          if [ -d ".github/policies" ] && [ -n "$(ls -A .github/policies/ 2>/dev/null)" ]; then
+            conftest test \
+              --policy .github/policies \
+              bootstrap/minio.yaml \
+              apps/platform/sample-app.yaml
+          else
+            echo "No OPA policies found in .github/policies/ — skipping conftest."
+            echo "Add .rego files to .github/policies/ to enable OPA gates."
+          fi

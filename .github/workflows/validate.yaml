@@ -1,0 +1,89 @@
+# Validates Terraform syntax and Kubernetes manifests on every pull request
+# and push to main. Acts as a gate before any changes reach the cluster.
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  tofu-validate:
+    name: OpenTofu Format & Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: "1.12.2"
+
+      - name: Terraform Format Check
+        working-directory: terraform
+        run: tofu fmt -check -recursive
+
+      - name: Terraform Init (no backend)
+        working-directory: terraform
+        # -backend=false skips state backend initialisation so no MinIO is needed in CI
+        run: tofu init -backend=false
+
+      - name: Terraform Validate
+        working-directory: terraform
+        run: tofu validate
+
+  kubeconform:
+    name: Kubeconform Manifest Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install kubeconform v0.7.0
+        run: |
+          curl -Lo /tmp/kubeconform.tar.gz \
+            https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz
+          tar -xzf /tmp/kubeconform.tar.gz -C /usr/local/bin kubeconform
+          chmod +x /usr/local/bin/kubeconform
+
+      - name: Validate manifests
+        # Skip CRD-based kinds (Application, ClusterPolicy) that kubeconform
+        # cannot validate without the full CRD schema bundle.
+        run: |
+          kubeconform \
+            -strict \
+            -summary \
+            -skip Application,ClusterPolicy \
+            -kubernetes-version 1.29.0 \
+            bootstrap/minio.yaml \
+            policies/networkpolicy/platform-default-deny.yaml \
+            policies/networkpolicy/platform-allow-dns.yaml \
+            apps/platform/sample-app.yaml
+
+  kyverno-test:
+    name: Kyverno Policy Dry-Run
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Kyverno CLI
+        run: |
+          KYVERNO_VERSION=$(curl -s https://api.github.com/repos/kyverno/kyverno/releases/latest \
+            | grep '"tag_name"' | sed 's/.*"tag_name": "\(.*\)".*/\1/')
+          curl -Lo /tmp/kyverno.tar.gz \
+            "https://github.com/kyverno/kyverno/releases/download/${KYVERNO_VERSION}/kyverno_${KYVERNO_VERSION#v}_linux_x86_64.tar.gz"
+          tar -xzf /tmp/kyverno.tar.gz -C /usr/local/bin kyverno
+          chmod +x /usr/local/bin/kyverno
+
+      - name: Apply policies against sample-app
+        # Dry-run (no cluster needed). Verifies the sample-app passes all
+        # validate-type policies. verify-image-signatures is Audit-only so
+        # it does not affect the exit code here.
+        run: |
+          kyverno apply \
+            policies/kyverno/disallow-privileged.yaml \
+            policies/kyverno/require-resources.yaml \
+            --resource apps/platform/sample-app.yaml

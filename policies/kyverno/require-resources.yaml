@@ -1,0 +1,53 @@
+# Every container must declare CPU and memory requests AND limits.
+# Without resource constraints, a single runaway pod can exhaust node
+# resources and trigger OOM-kills cluster-wide.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-requests-limits
+  annotations:
+    policies.kyverno.io/title: Require CPU and Memory Requests and Limits
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/description: >-
+      All containers must specify CPU and memory requests and limits to
+      ensure fair resource sharing and prevent noisy-neighbour issues.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: validate-resources-containers
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: "CPU and memory requests and limits are required for all containers."
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  requests:
+                    memory: "?*"
+                    cpu: "?*"
+                  limits:
+                    memory: "?*"
+                    cpu: "?*"
+    - name: validate-resources-init-containers
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: "CPU and memory requests and limits are required for all init containers."
+        pattern:
+          spec:
+            =(initContainers):
+              - resources:
+                  requests:
+                    memory: "?*"
+                    cpu: "?*"
+                  limits:
+                    memory: "?*"
+                    cpu: "?*"

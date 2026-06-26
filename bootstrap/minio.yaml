@@ -1,0 +1,117 @@
+# Bootstraps a MinIO instance used as the S3-compatible backend for OpenTofu
+# remote state. Applied once before `tofu init`; not managed by ArgoCD so that
+# the state backend exists before ArgoCD itself is provisioned.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minio
+---
+# Credentials are injected here. Never commit real values — use the placeholders
+# and apply the file locally after substitution.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-credentials
+  namespace: minio
+type: Opaque
+stringData:
+  MINIO_ROOT_USER: "<MINIO_ROOT_USER>"
+  MINIO_ROOT_PASSWORD: "<MINIO_ROOT_PASSWORD>"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-data
+  namespace: minio
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: minio
+  labels:
+    app: minio
+spec:
+  # Recreate avoids two MinIO pods contending for the same PVC
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: minio
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          # Pin to an exact tag — never use :latest
+          # Find current tags at: https://quay.io/repository/minio/minio?tab=tags
+          image: "quay.io/minio/minio:<MINIO_IMAGE_TAG>"
+          args:
+            - server
+            - /data
+            - --console-address
+            - ":9001"
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: MINIO_ROOT_USER
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: MINIO_ROOT_PASSWORD
+          ports:
+            - name: api
+              containerPort: 9000
+              protocol: TCP
+            - name: console
+              containerPort: 9001
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: minio-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: minio
+  labels:
+    app: minio
+spec:
+  type: ClusterIP
+  selector:
+    app: minio
+  ports:
+    - name: api
+      port: 9000
+      targetPort: api
+      protocol: TCP
+    - name: console
+      port: 9001
+      targetPort: console
+      protocol: TCP
