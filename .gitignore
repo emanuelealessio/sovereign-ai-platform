@@ -1,0 +1,13 @@
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+terraform.tfvars
+*.auto.tfvars
+token_git.txt
+# Il lock file INVECE va committato: NON metterlo qui
+
+# Credenziali / ambiente
+.env
+*.env
+secrets/
