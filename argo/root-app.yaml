@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/emanuelealessio/sovereign-ai-platform.git
+    targetRevision: main
+    path: argo/apps          # ← la cartella delle Application figlie
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd        # ← le Application figlie nascono qui
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

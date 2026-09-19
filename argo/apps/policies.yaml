@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kyverno-policies
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/emanuelealessio/sovereign-ai-platform.git
+    targetRevision: main
+    path: policies/kyverno
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kyverno
+  syncPolicy:
+    automated:
+      prune: true        # togli una policy dal Git → sparisce dal cluster
+      selfHeal: true     # qualcuno la cancella a mano → ArgoCD la ripristina
