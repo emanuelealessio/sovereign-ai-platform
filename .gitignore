@@ -5,6 +5,7 @@
 terraform.tfvars
 *.auto.tfvars
 token_git.txt
+ghcr_token.txt
 # Il lock file INVECE va committato: NON metterlo qui
 
 # Credenziali / ambiente
