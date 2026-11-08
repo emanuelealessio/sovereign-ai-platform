@@ -12,3 +12,8 @@ ghcr_token.txt
 .env
 *.env
 secrets/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
