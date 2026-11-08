@@ -14,3 +14,8 @@ variable "git_repo_url" {
   description = "URL del repo Git tracciato da ArgoCD (root app)"
   type        = string
 }
+variable "pss_version" {
+  description = "Versione dei Pod Security Standards applicata ai namespace"
+  type        = string
+  default     = "v1.35"
+}
